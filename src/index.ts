@@ -1,6 +1,5 @@
 import { codeToHtml, BundledTheme } from 'shiki/bundle-web.mjs';
 import Differ, { DiffResult } from './Differ';
-import merge from 'lodash.merge';
 
 const differ = new Differ({
 	detectCircular: true,
@@ -9,7 +8,7 @@ const differ = new Differ({
 	arrayDiffMethod: 'lcs',
 });
 
-function mergeDiff(diff: readonly [DiffResult[], DiffResult[]], needComma: (i: number) => boolean) {
+function mergeDiff(diff: readonly [DiffResult[], DiffResult[]]) {
 	const items: DiffResult[] = [];
 
 	const [d1, d2] = diff;
@@ -18,16 +17,14 @@ function mergeDiff(diff: readonly [DiffResult[], DiffResult[]], needComma: (i: n
 		const di2 = d2[i]!;
 
 		if (di1.type === 'equal' && di2.type === 'equal') {
-			const comma = needComma(i);
-			items.push({ ...di1, comma });
+			items.push(di1);
 			continue;
 		}
 
 		switch (di1.type) {
 			case 'modify':
 			case 'remove':
-				const comma = needComma(i);
-				items.push({ ...di1, text: `- ${di1.text}`, comma });
+				items.push({ ...di1, text: `- ${di1.text}` });
 				break;
 		}
 
@@ -38,7 +35,25 @@ function mergeDiff(diff: readonly [DiffResult[], DiffResult[]], needComma: (i: n
 				break;
 		}
 	}
-	return items;
+
+	const modifiedItems: DiffResult[] = [];
+
+	for (let i = 0; i < items.length; i++) {
+		const item = items[i]!;
+		const nextItem = items[i + 1];
+
+		const comma = needComma(item.text, nextItem?.text);
+		modifiedItems.push({ ...item, comma });
+	}
+
+	return modifiedItems;
+
+	function needComma(text: string, nextText?: string) {
+		if (text.endsWith('{') || text.endsWith('[')) return false;
+		if (!nextText) return false;
+		if (nextText.endsWith('}') || nextText.endsWith(']')) return false;
+		return true;
+	}
 }
 
 function buildJson(mergedDiff: DiffResult[]) {
@@ -55,13 +70,8 @@ type Options = {
 };
 
 export function diff(before: Record<string, any> | any[], after: Record<string, any> | any[]) {
-	const mergedPlain = merge(before, after);
 	const diff = differ.diff(before, after);
-	const [, mDiff] = differ.diff({}, mergedPlain);
-	function needComma(i: number) {
-		return mDiff[i]?.comma || false;
-	}
-	return mergeDiff(diff, needComma);
+	return mergeDiff(diff);
 }
 
 export function diffToJson(before: Record<string, any> | any[], after: Record<string, any> | any[]) {

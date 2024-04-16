@@ -49,9 +49,15 @@ function mergeDiff(diff: readonly [DiffResult[], DiffResult[]]) {
 	return modifiedItems;
 
 	function needComma(text: string, nextText?: string) {
+		if (text.startsWith('- ') || text.startsWith('+ ')) {
+			text = text.slice(2);
+		}
+		if (nextText?.startsWith('- ') || nextText?.startsWith('+ ')) {
+			nextText = nextText.slice(2);
+		}
 		if (text.endsWith('{') || text.endsWith('[')) return false;
 		if (!nextText) return false;
-		if (nextText.endsWith('}') || nextText.endsWith(']')) return false;
+		if (nextText === '}' || nextText === ']') return false;
 		return true;
 	}
 }
@@ -71,6 +77,12 @@ type Options = {
 
 export function diff(before: Record<string, any> | any[], after: Record<string, any> | any[]) {
 	const diff = differ.diff(before, after);
+
+	/* DEBUG */
+	// const _merged = mergeDiff(diff);
+	// const _json = buildJson(_merged);
+	// console.log(_json);
+
 	return mergeDiff(diff);
 }
 

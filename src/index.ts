@@ -1,31 +1,32 @@
-import Differ, { DiffResult } from 'json-diff-kit/dist/differ';
-import { codeToHtml } from 'shiki/bundle-web.mjs';
+import { codeToHtml, BundledTheme } from 'shiki/bundle-web.mjs';
+import Differ, { DiffResult } from './Differ';
+import merge from 'lodash.merge';
 
-const differ = new Differ.default({
+const differ = new Differ({
 	detectCircular: true,
 	maxDepth: Infinity,
 	showModifications: true,
 	arrayDiffMethod: 'lcs',
 });
 
-function mergeDiff(diff: readonly [DiffResult[], DiffResult[]]) {
+function mergeDiff(diff: readonly [DiffResult[], DiffResult[]], needComma: (i: number) => boolean) {
 	const items: DiffResult[] = [];
 
 	const [d1, d2] = diff;
-
 	for (let i = 0; i < d1.length; i++) {
 		const di1 = d1[i]!;
 		const di2 = d2[i]!;
 
 		if (di1.type === 'equal' && di2.type === 'equal') {
-			items.push(di1);
+			const comma = needComma(i);
+			items.push({ ...di1, comma });
 			continue;
 		}
 
 		switch (di1.type) {
 			case 'modify':
 			case 'remove':
-				const comma = di1.comma || di2.type !== 'equal' || di1.text !== di2.text;
+				const comma = needComma(i);
 				items.push({ ...di1, text: `- ${di1.text}`, comma });
 				break;
 		}
@@ -49,14 +50,32 @@ function buildJson(mergedDiff: DiffResult[]) {
 	return json;
 }
 
-export async function diffGitJson(before: Record<string, any> | any[], after: Record<string, any> | any[]) {
+type Options = {
+	theme: BundledTheme;
+};
+
+export function diff(before: Record<string, any> | any[], after: Record<string, any> | any[]) {
+	const mergedPlain = merge(before, after);
 	const diff = differ.diff(before, after);
-	const mergedDiff = mergeDiff(diff);
-	const json = buildJson(mergedDiff);
+	const [, mDiff] = differ.diff({}, mergedPlain);
+	function needComma(i: number) {
+		return mDiff[i]?.comma || false;
+	}
+	return mergeDiff(diff, needComma);
+}
+
+export function diffToJson(before: Record<string, any> | any[], after: Record<string, any> | any[]) {
+	const mergedDiff = diff(before, after);
+	return buildJson(mergedDiff);
+}
+
+export async function diffToHtml(before: Record<string, any> | any[], after: Record<string, any> | any[], options?: Options) {
+	const json = diffToJson(before, after);
 
 	const html = await codeToHtml(json, {
 		lang: 'json',
-		theme: 'github-dark-default',
+		theme: options?.theme || 'github-dark-default',
 	});
+
 	return html;
 }
